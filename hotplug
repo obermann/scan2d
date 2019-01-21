@@ -1,0 +1,30 @@
+#!/bin/sh
+if [ "$PRODUCT" != '4e8/3433/100' ]; then
+	exec /usr/sbin/hotplug "$@" # relocated original
+else # We got SCX-4600 MFP, let physical world help us simplify.
+	# Beware, each USB interface gets its own hotplug event (and not only >=Linux 2.6).
+	# SCX-4600 MFP has two: '255/255/255', '7/1/2'.
+	if [ "$INTERFACE" = '7/1/2' ]; then
+		if [ "$ACTION" = 'add' ]; then
+			logger -t hotplug.sh -p user.debug SCX-4600 MFP printer interface went on.
+			insmod /lib/modules/`uname -r`/printer.o
+			/usr/sbin/p910nd -b -f /dev/usb/lp0 0 -t 5 # as in printer.c
+			/opt/sbin/scan2d
+			# Without std. f.d. saned -a is failing and using 100% CPU
+			exec 0</dev/null
+			exec 1>/dev/null
+			exec 2>/dev/null
+			/opt/sbin/saned -a
+		fi
+		if [ "$ACTION" = 'remove' ]; then
+			logger -t hotplug.sh -p user.debug SCX-4600 MFP printer interface went off.
+			kill -SIGTERM `cat /var/run/scan2d.pid`
+			rm /var/run/scan2d.pid
+			kill -SIGTERM `cat /var/run/saned.pid`
+			rm /var/run/saned.pid
+			#kill -SIGTERM `cat /var/run/p9100d.pid` # yes !=p910nd
+			killall -SIGTERM p910nd
+			rm /var/run/p9100d.pid
+		fi
+	fi
+fi
